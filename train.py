@@ -21,19 +21,19 @@ plt.rcParams['image.cmap'] = 'gray'
 def g_wloss(scores_fake):
     return -scores_fake.mean()
 
-def d_gpwloss(D, realx, fakex, y, lambd=10):
-    gp = compute_gradient_penalty(D, realx, fakex, y)
-    real_scores = D(realx, y)
-    fake_scores = D(fakex, y)
+def d_gpwloss(D, realx, fakex, lambd=10):
+    gp = compute_gradient_penalty(D, realx, fakex)
+    real_scores = D(realx)
+    fake_scores = D(fakex)
     return fake_scores.mean() - real_scores.mean() + lambd * gp
 
-def compute_gradient_penalty(D, real_samples, fake_samples, y):
+def compute_gradient_penalty(D, real_samples, fake_samples):
     """Calculates the gradient penalty loss for WGAN GP"""
     # Random weight term for interpolation between real and fake samples
     alpha = torch.Tensor(np.random.random((real_samples.size(0), 1, 1, 1)))
     # Get random interpolation between real and fake samples
     interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
-    d_interpolates = D(interpolates, y)
+    d_interpolates = D(interpolates)
     with torch.no_grad():
         fake = torch.Tensor(real_samples.shape[0], 1).fill_(1.0)
     # Get gradient w.r.t. interpolates
@@ -82,18 +82,8 @@ class GAN:
                 # transforms.Resize(20),
                 transforms.ToTensor(),
              ])
-        dataset1 = datasets.MNIST('../data', train=True, download=True, transform=transform)
+        dataset1 = datasets.MNIST('data', train=True, download=True, transform=transform)
         self.train_loader = torch.utils.data.DataLoader(dataset1, batch_size=self.batch_size)
-
-
-    def sample_generator(self, model_path):
-        net = torch.load(model_path)
-        net.eval()
-        N = 49
-        labels = (torch.ones(7,7)*(torch.arange(7).unsqueeze(-1))).type(torch.long)
-        with torch.no_grad():
-            fake_imgs = net(N, labels.view(-1))
-        self.show_images(fake_imgs.squeeze())
 
 
     def interpolate_samples(self, model_path):
@@ -102,7 +92,9 @@ class GAN:
         N = 4
         w = 6
         noise_dim = 50
+        counter = 0
         while True:
+            counter += 1
             z = noise(N, noise_dim)
             zs = np.zeros((w+1, w+1, noise_dim))
             zs[0] = np.linspace(z[0], z[1], w+1)
@@ -112,9 +104,9 @@ class GAN:
             zs = torch.from_numpy(zs).view((w+1)**2, noise_dim).type(torch.float32)
             # inter_z = torch.stack([z[0] + diff * i for i in range(w+1)])
             with torch.no_grad():
-                original = net(z, torch.Tensor([0]))
-                interpolated = net(zs, torch.Tensor([0]))
-            self.show_images(interpolated.squeeze())
+                original = net(z)
+                interpolated = net(zs)
+            self.show_images(interpolated.squeeze(), f"samples{counter}")
 
 
 
@@ -143,8 +135,8 @@ class GAN:
         # train on fake images
         with torch.no_grad():
             z = noise(self.batch_size, self.noise_dim)
-            fakex = self.generator(z, realy)  # (batch_size, noise_dim)
-        loss = self.d_loss(self.discriminator, realx, fakex, realy)
+            fakex = self.generator(z)  # (batch_size, noise_dim)
+        loss = self.d_loss(self.discriminator, realx, fakex)
         loss.backward()
         self.d_optim.step()
 
@@ -153,10 +145,9 @@ class GAN:
 
     def train_generator(self):
         self.generator.zero_grad()
-        fakey = torch.LongTensor(np.random.randint(0, self.n_classes, self.batch_size))
         z = noise(self.batch_size, self.noise_dim)
-        fake_images = self.generator(z, fakey)
-        d_scores = self.discriminator(fake_images, fakey)
+        fake_images = self.generator(z)
+        d_scores = self.discriminator(fake_images)
         g_loss = self.g_loss(d_scores)
         g_loss.backward()
         self.g_optim.step()
@@ -167,8 +158,8 @@ class GAN:
         print(f"Epoch {counter}: D loss: {d_loss}  g loss: {g_loss}")
         fake_images = fake_images.data.cpu().numpy().reshape(-1, self.img_size, self.img_size)
         self.show_images(fake_images, f"{name}_imgs_step_{counter}.png")
-        torch.save(self.discriminator, f"discriminator_{counter}")
-        torch.save(self.generator, f"generator_{counter}")
+        torch.save(self.discriminator, f"models/discriminator_{counter}")
+        torch.save(self.generator, f"models/generator_{counter}")
 
 
     def show_images(self, images,filename=None, max_imgs=50):
@@ -222,7 +213,5 @@ if __name__ == "__main__":
     D = DCDiscriminator(**d_params)
 
     gan = GAN(G, D, **train_params)
-    # gan.train("WDCGAN")
-    # gan.sample_generator("generator_2399")
-    gan.interpolate_samples("models/generator_2299")
-    # run_a_gan(D,G,gan.d_optim, gan.g_optim, gan.train_loader, discriminator_ce_loss, generator_ce_loss, gan)
+    # gan.train("DCGAN")
+    gan.interpolate_samples("models/generator_2099")

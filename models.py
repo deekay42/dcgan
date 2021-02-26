@@ -35,10 +35,10 @@ class DCDiscriminator(nn.Module):
         return x
 
 
-class DCGenerator(Generator):
+class DCGenerator(nn.Module):
 
     def __init__(self, noise_dim, hidden_dim, num_conv1, size_conv1, num_conv2, size_conv2, img_dim):
-        super().__init__(noise_dim)
+        super().__init__()
         self.conv2_in_w = 1 + (img_dim - size_conv2 + 2) // 2
         self.conv1_in_w = 1 + (self.conv2_in_w - size_conv1 + 2) // 2
         self.fc2_in = self.conv1_in_w * self.conv1_in_w * num_conv1
